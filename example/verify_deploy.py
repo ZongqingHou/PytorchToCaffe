@@ -12,47 +12,42 @@ from torch.nn.parameter import Parameter
 from torchvision.models import resnet
 import time
 
-
-
 import cv2
+
+# define your model
+from led3d import led3d
+net=led3d(975)
 
 #caffe load formate
 def load_image_caffe(imgfile):
     image = caffe.io.load_image(imgfile)
     transformer = caffe.io.Transformer({'data': (1, 3, args.height, args.width)})
     transformer.set_transpose('data', (2, 0, 1))
-    transformer.set_mean('data', np.array([args.meanB, args.meanG, args.meanR]))
-    transformer.set_raw_scale('data', args.scale)
-    transformer.set_channel_swap('data', (2, 1, 0))
+    # transformer.set_channel_swap('data', (2, 1, 0))
 
     image = transformer.preprocess('data', image)
     image = image.reshape(1, 3, args.height, args.width)
     return image
 
 def load_image_pytorch(imgfile):
-    
-    # normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406],
-    #                                  std=[0.229, 0.224, 0.225])
-    # # transforms.ToTensor()
-    # transform1 = transforms.Compose([
-    #     transforms.ToTensor(), # range [0, 255] -> [0.0,1.0]
-    #     normalize
-    #     ]
-    # )
-    # ##numpy.ndarray
-    # img = cv2.imread(imgfile)# 读取图像
-    # img = cv2.resize(img,(224,244))
-    # img1 = transform1(img) # 归一化到 [0.0,1.0]
-    # print("img1 = ",img1)
+    img = cv2.imread(imgfile).astype(np.float32)
+    img = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+    img = cv2.resize(img, (args.width, args.height))
 
-    img = np.ones([1,3,args.height, args.width])
-    # 转化为numpy.ndarray并显示
+    img[:, :, 0] = img[:, :, 0] / 255
+    img[:, :, 1] = img[:, :, 1] / 255
+    img[:, :, 2] = img[:, :, 2] / 255
+
+    tmp = torch.from_numpy(img).float()
+    tmp = tmp.permute(2, 0, 1)
+    tmp = tmp.view(1, tmp.size(0), tmp.size(1), tmp.size(2))
+    img = tmp.numpy()
+
     return img
 
 
 
 def forward_pytorch(weightfile, image):
-    net=resnet.resnet18()
     checkpoint = torch.load(weightfile)
     net.load_state_dict(checkpoint)
     if args.cuda:
@@ -66,7 +61,6 @@ def forward_pytorch(weightfile, image):
         image = Variable(image)
     t0 = time.time()
     blobs = net.forward(image)
-    #print(blobs.data.numpy().flatten())
     t1 = time.time()
     return t1-t0, blobs, net.parameters()
 
@@ -78,8 +72,8 @@ def forward_caffe(protofile, weightfile, image):
     else:
         caffe.set_mode_cpu()
     net = caffe.Net(protofile, weightfile, caffe.TEST)
-    net.blobs['blob1'].reshape(1, 3, args.height, args.width)
-    net.blobs['blob1'].data[...] = image
+    net.blobs[args.input_layer].reshape(1, 3, args.height, args.width)
+    net.blobs[args.input_layer].data[...] = image
     t0 = time.time()
     output = net.forward()
     t1 = time.time()
@@ -87,22 +81,18 @@ def forward_caffe(protofile, weightfile, image):
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='convert caffe to pytorch')
-    parser.add_argument('--protofile', default='/home/shining/Projects/github-projects/pytorch-project/nn_tools/MGN.prototxt', type=str)
-    parser.add_argument('--weightfile', default='/home/shining/Projects/github-projects/pytorch-project/nn_tools/MGN.caffemodel', type=str)
-    parser.add_argument('--model', default="/home/shining/Projects/github-projects/pytorch-project/nn_tools/model_100.pt", type=str)
+    parser.add_argument('--protofile', type=str)
+    parser.add_argument('--weightfile', type=str)
+    parser.add_argument('--model', type=str)
     parser.add_argument('--imgfile', default='/home/shining/Projects/github-projects/pytorch-project/nn_tools/001763.jpg', type=str)
-    parser.add_argument('--height', default=384, type=int)
+    parser.add_argument('--height', default=128, type=int)
     parser.add_argument('--width', default=128, type=int)
-    parser.add_argument('--meanB', default=104, type=float)
-    parser.add_argument('--meanG', default=117, type=float)
-    parser.add_argument('--meanR', default=123, type=float)
-    parser.add_argument('--scale', default=255, type=float)
-    parser.add_argument('--synset_words', default='', type=str)
     parser.add_argument('--cuda', action='store_true', help='enables cuda')
 
+    parser.add_argument('--input_layer', default='blob1', type=str)
+    parser.add_argument('--out_layer', default='cat_blob1', type=str)
+
     args = parser.parse_args()
-    print(args)
-    
     
     protofile = args.protofile
     weightfile = args.weightfile
@@ -116,7 +106,7 @@ if __name__ == '__main__':
     print('caffe forward time %d', time_caffe)
     
     print('------------ Output Difference ------------')
-    blob_name = "cat_blob1"
+    blob_name = args.input_layer
     if args.cuda:
         pytorch_data = pytorch_blobs.data.cpu().numpy().flatten()
     else:

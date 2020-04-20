@@ -1,5 +1,6 @@
 import sys
 sys.path.insert(0, '.')
+sys.path.append("../")
 
 import cv2
 import torch
@@ -9,8 +10,8 @@ import pytorch_to_caffe
 
 
 # define your model
-from led3d import led3d
-net=led3d(975)
+from example.convert2caffe.led_pcb.led3d_pcb import led3d
+net=led3d()
 
 def preprocess_img(img_path):
 	data = cv2.imread(img_path)
@@ -29,12 +30,16 @@ if __name__ == '__main__':
 	import argparse
 
 	parser = argparse.ArgumentParser(description='Pytorch2Caffe')
-	parser.add_argument('--name', type=str, help='save name')
-	parser.add_argument('--model_path', type=str, help='converted model path')
+	parser.add_argument('--name', default="global_pcb", type=str, help='save name')
+	parser.add_argument('--model_path', default="/home/file_collections/gitlab/PytorchToCaffe/example/convert2caffe/led_pcb/led3d_baseline_attention_arcface_preludropout_all_82.pth", type=str, help='converted model path')
 	parser.add_argument('--img_path', type=str, default='../001763.jpg')
 
 	opt = parser.parse_args()
-	net.load_state_dict(torch.load(opt.model_path))
+
+	net_dict = net.state_dict()
+	model_loaded = torch.load(opt.model_path, map_location='cuda:0')
+	model_loaded = {k.split("module.")[-1]: v for k, v in model_loaded.items() if k.split("module.")[-1] in net_dict}
+	net.load_state_dict(model_loaded)
 	net.eval()
 
 	data = preprocess_img(opt.img_path)

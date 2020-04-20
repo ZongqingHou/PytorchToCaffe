@@ -151,16 +151,19 @@ class Layer_param():
             if isinstance(scale_factor,int):
                 upsample_param.scale = scale_factor
             else:
-                upsample_param.scale_h = scale_factor[0]
-                upsample_param.scale_w = scale_factor[1]
+                upsample_param.scale_h = int(scale_factor[0])
+                upsample_param.scale_w = int(scale_factor[1])
 
         if size:
             if isinstance(size,int):
                 upsample_param.upsample_h = size
+            # elif isinstance(size, tuple):
+            #     upsample_param.upsample_h = size[0]
+            #     upsample_param.upsample_h = size[1]
             else:
-                upsample_param.upsample_h = size[0] * scale_factor
+                upsample_param.upsample_h = size[0] * int(scale_factor[0])
                 upsample_param.\
-                    upsample_w = size[1] * scale_factor
+                    upsample_w = size[1] * int(scale_factor[1])
         self.param.upsample_param.CopyFrom(upsample_param)
 
     def add_data(self,*args):
